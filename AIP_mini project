@@ -1,0 +1,238 @@
+A). Client (Frontent)
+App.js
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+import 'bootstrap/dist/css/bootstrap.min.css';
+
+// Components
+import Register from './Register';
+import Login from './Login';
+import Dashboard from './Dashboard';
+import MyProfile from './MyProfile';
+// 🔥 Naya component import karein (Ise niche step 2 mein banayenge)
+import ForgotPassword from './ForgotPassword'; 
+
+function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const loggedInUser = localStorage.getItem("user");
+    if (loggedInUser) {
+      try {
+        setUser(JSON.parse(loggedInUser));
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+        localStorage.removeItem("user");
+      }
+    } else {
+      setUser(null);
+    }
+  }, [location]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    setUser(null);
+    navigate('/login');
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', width: '100%' }}>
+      
+      {/* --- NAVBAR START --- */}
+      <nav className="navbar navbar-expand-lg navbar-dark bg-danger shadow-sm py-2 px-3 sticky-top">
+        <div className="container-fluid">
+          
+          <Link className="navbar-brand fw-bold fs-4" to={user ? "/dashboard" : "/"}>
+            Vivah Network
+          </Link>
+
+          {user && (
+            <div className="d-flex flex-grow-1 justify-content-center order-lg-0 order-1">
+              <ul className="navbar-nav flex-row gap-3">
+                <li className="nav-item">
+                  <Link className="nav-link text-white fw-semibold" to="/my-profile">Profile</Link>
+                </li>
+                <li className="nav-item">
+                  <Link className="nav-link text-white fw-semibold" to="/dashboard">Search</Link>
+                </li>
+                <li className="nav-item">
+                  <Link className="nav-link text-warning fw-bold border border-warning px-2 rounded" to="/upgrade">UPGRADE</Link>
+                </li>
+              </ul>
+            </div>
+          )}
+
+          <div className="ms-auto d-flex align-items-center order-0">
+            {!user ? (
+              <div className="d-flex gap-2">
+                <Link className="btn btn-light text-danger btn-sm fw-bold rounded-pill px-3" to="/login">Login</Link>
+                <Link className="btn btn-outline-light btn-sm fw-bold rounded-pill px-3" to="/register">Register</Link>
+              </div>
+            ) : (
+              <div className="d-flex align-items-center gap-3">
+                <div className="text-white d-none d-lg-block text-end">
+                  <span className="fw-bold">{user.fullName}</span>
+                </div>
+                <button className="btn btn-sm btn-outline-light rounded-pill px-3" onClick={handleLogout}>
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </nav>
+
+      {/* --- MAIN CONTENT AREA --- */}
+      <main>
+        <Routes>
+          <Route path="/" element={<Register />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<Login />} />
+          
+          {/* 🔥 FIX: Naya Forgot Password Route add kiya gaya hai */}
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/my-profile" element={<MyProfile />} />
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
+  export default App;
+App.css
+
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+B). Server (Backend)
+Server.js
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+
+const app = express();
+const PORT = 5000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// MongoDB Connection
+mongoose.connect('mongodb://localhost:27017/employeeDB') 
+    .then(() => console.log("Database Connected Successfully"))
+    .catch(err => console.log("DB Connection Error: ", err));
+
+// User Schema
+const userSchema = new mongoose.Schema({
+    fullName: String,
+    email: { type: String, required: true, unique: true },
+    mobile: String,
+    password: String,
+    state: String,
+    district: String,
+    gender: String,
+    occupation: { type: String, default: "" }, // Default empty string taaki frontend crash na ho
+    bio: { type: String, default: "" }        // Default empty string
+});
+
+// User Model (Iska hona zaroori hai routes chalne ke liye)
+const User = mongoose.model('User', userSchema);
+
+// 1. Register Route
+app.post('/api/register', async (req, res) => {
+    try {
+        const newUser = new User(req.body);
+        await newUser.save();
+        res.status(201).json({ message: "Account Created Successfully!" });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// 2. Login Route
+app.post('/api/login', async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        const user = await User.findOne({ email });
+        if (user && user.password === password) {
+            res.json({ message: "Login Successful!", user });
+        } else {
+            res.status(400).json({ error: "Invalid Email or Password" });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 3. Profile Update Route (Naya Add Kiya Gaya)
+app.put('/api/update-profile', async (req, res) => {
+    const { email, occupation, bio } = req.body;
+    try {
+        const updatedUser = await User.findOneAndUpdate(
+            { email: email }, 
+            { occupation, bio }, 
+            { new: true } // updated data wapas bhejne ke liye
+        );
+        if (!updatedUser) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        res.json({ message: "Profile Updated Successfully!", user: updatedUser });
+    } catch (err) {
+        res.status(500).json({ error: "Update failed: " + err.message });
+    }
+});
+
+// 4. Sabhi users ko fetch karne ka route
+app.get('/api/users', async (req, res) => {
+    try {
+        const users = await User.find({}, '-password'); 
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
+
